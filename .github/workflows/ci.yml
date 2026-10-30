@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  node20:
+    name: pacote compilado no Node 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - name: Assinar e validar usando dist/
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            import { assinarEvento, carregarCertificado, gerarIdEvento, montarEvento, validarEvento, verificarAssinatura } from "./dist/index.js";
+            const cert = carregarCertificado(readFileSync("test/fixtures/certificado-legado.pfx"), "senha-teste");
+            const emp = { tpInsc: 1, nrInsc: "12ABC34501DE35" };
+            const xml = assinarEvento(montarEvento("S-1000", { "@Id": gerarIdEvento(emp), ideEvento: { tpAmb: 2, procEmi: 1, verProc: "ci" }, ideEmpregador: { tpInsc: 1, nrInsc: "12ABC345" }, infoEmpregador: { inclusao: { idePeriodo: { iniValid: "2026-11" }, infoCadastro: { classTrib: "99", indCoop: 0, indConstr: 0, indDesFolha: 0, indOptRegEletron: 1 } } } }), cert);
+            const ok = verificarAssinatura(xml) && (await validarEvento(xml)).valido;
+            console.log(process.version, ok);
+            if (!ok) process.exit(1);
+          '
+
+  interop:
+    name: assinatura conferida pelo JDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: node --experimental-strip-types scripts/amostra.ts amostras
+      - name: XMLDSig e XSD de referência aceitam o evento assinado
+        run: java test/interop/Verifica.java amostras/s1000.xml schemas/eventos/v_S_01_03_00/evtInfoEmpregador.xsd
+      - name: Evento adulterado é rejeitado
+        run: "! java test/interop/Verifica.java amostras/s1000-adulterado.xml schemas/eventos/v_S_01_03_00/evtInfoEmpregador.xsd"
