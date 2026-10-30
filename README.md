@@ -120,6 +120,32 @@ EVENTOS["S-2299"]; // { raiz: "evtDeslig", nome: "Desligamento" }
 
 O servidor do eSocial usa a cadeia ICP-Brasil. Se o sistema não a tiver instalada, passe os certificados em `ca` (PEM): a raiz [ICP-Brasil v2](http://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasilv2.crt) e as ACs da RFB e do SERPRO, listadas no MOD §9.
 
+## Perguntas frequentes
+
+### Como assinar o XML do eSocial em Node.js?
+
+Carregue o certificado A1 com `carregarCertificado` e chame `assinarEvento`. A assinatura segue o MOD §6.7: XMLDSig *enveloped*, canonicalização C14N, RSA-SHA256, digest SHA-256, `Reference URI=""` e só o `X509Certificate` no `KeyInfo`.
+
+### Qual algoritmo de assinatura o eSocial exige: SHA-1 ou SHA-256?
+
+SHA-256 (`http://www.w3.org/2001/04/xmldsig-more#rsa-sha256`), desde a versão 1.2 do MOD. Bibliotecas e exemplos antigos que ainda usam RSA-SHA1 geram assinatura recusada.
+
+### Como gerar o Id do evento do eSocial?
+
+`ID` + tipo de inscrição (1 dígito) + número de inscrição com 14 posições (completado com zeros à direita) + data e hora `AAAAMMDDhhmmss` + sequencial de 5 dígitos, total de 36 caracteres (MOD §8.3). `gerarIdEvento` e `criarGeradorDeId` fazem isso, com o CNPJ base ou completo conforme a natureza jurídica.
+
+### Como validar o XML do eSocial contra o XSD?
+
+`validarEvento(xml)` usa os XSDs oficiais do leiaute S-1.3 embutidos no pacote, sem Java e sem binário nativo, e devolve mensagens como `Element 'indCoop': This element is not expected. Expected is ( classTrib ).`
+
+### Por que o eSocial devolve "assinatura inválida" (erro 142)?
+
+As causas mais comuns são reformatar ou indentar o XML depois de assinar, usar `Reference URI="#Id"` em vez de `URI=""` e declarar namespaces com prefixo no envelope SOAP, que entram na canonicalização do evento. A biblioteca evita os três.
+
+### O eSocial aceita CNPJ alfanumérico?
+
+Sim, desde julho de 2026, com letras maiúsculas. Use o Pacote de Comunicação v1.6-Alfa, que já vem no pacote. Letras minúsculas são rejeitadas.
+
 ## Situação e limitações
 
 - **O envio ainda não foi testado contra a produção restrita com um certificado ICP-Brasil real.** Ele segue os WSDLs e o MOD e é testado contra um servidor local com TLS mútuo. Se você testar, conte o resultado numa issue.
